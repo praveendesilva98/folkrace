@@ -9,6 +9,8 @@ GPIO.setmode(GPIO.BCM)
 
 # Variables
 pinServo, pinPwm, pinIna, pinInb = 12, 18, 24, 23
+rc = 0 #Motor PWM
+st = 0 #Steering rotating angle
 
 # Lidar
 tof = VL53L0X()
@@ -59,21 +61,63 @@ def antiClockwise():
     GPIO.output(pinInb, GPIO.LOW)
 
 
-def run():
-    if keyboard.is_pressed("up arrow"):
-        for pwmM in range(0, 100, 10):
-            pwm.ChangeDutyCycle(pwmM)
-    elif keyboard.is_pressed("right arrow"):
-        angleS = 50
-        setAngle(angleS)
-    elif keyboard.is_pressed("left arrow"):
-        angleS = 130
-        setAngle(angleS)
+def motorSpeed():
+    if keyboard.read_key() == "u":
+        global rc
+        rc += 5
+    elif keyboard.read_key() == "b":
+        rc += -5
+    
+    if rc>100:
+        rc=100
+    elif rc<0:
+        rc=0
+    pwm.ChangeDutyCycle(rc)
+    return rc
+
+
+def steerAngle():
+    if keyboard.read_key() == "k":
+        global st
+        st += 10
+    elif keyboard.read_key() == "h":
+        st += -10
     else:
-        pwmM = 0
-        pwm.ChangeDutyCycle(pwmM)
-        angleS = 90
-        setAngle(angleS)
+        st = 90
+    
+    if st>130:
+        st=130
+    elif st<50:
+        st=50
+    setAngle(st)
+    return st
+
+
+def writeHeaderCsv():
+    with open('dataset.csv', 'w', encoding='UTF8') as csv_file:
+            csv_writer = csv.writer(csv_file)
+            header = ['Lidar', 'Stearing Angle', 'Motor dutycycle']
+            csv_writer.writerow(header)
+
+
+def readCsv():
+    try:
+        csv_file = open('dataset.csv')
+        csv_reader = csv.reader(csv_file)
+        count = len(list(csv_reader))
+        return count
+    except IOError:
+        print("File doen't exist!")
+        writeHeaderCsv()
+
+
+def writeCsv(lidar, servoAngle, motorDC):
+    count = readCsv()
+    data = [lidar, servoAngle, motorDC]
+    with open('dataset.csv', 'a', encoding='UTF8') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(data)
+    csv_file.close()
 
 
 clockwise()
@@ -81,11 +125,10 @@ clockwise()
 
 try:
     while True:
-        #pwmM, angleS = 0, 90
-        #run()
+        motorSpeed()
+        steerAngle()
         distance = tof.get_distance()
-        print("%d mm" % (distance))
-        #saveCsv(distance, run[1], run[0])
+        writeCsv(distance, st, rc)
 except KeyboardInterrupt:
         pwm.stop()
         servo.stop()
