@@ -1,8 +1,9 @@
  
 import RPi.GPIO as GPIO
 from VL53L0X_rasp_python.python.VL53L0X import *
-import keyboard
-import csv
+import pandas as pd
+from sklearn import linear_model
+
 
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)
@@ -33,13 +34,14 @@ servo = GPIO.PWM(pinServo, 50)
 servo.start(0)
 
 
-def saveCsv(lidar, servoAngle, motorDC):
-    header = ['Lidar', 'Stearing Angle', 'Motor dutycycle']
-    data = [lidar, servoAngle, motorDC]
-    with open('dataset.csv', 'w', encoding='UTF8') as f:
-        writer = csv.writer(f)
-        writer.writerow(header)
-        writer.writerow(data)
+def predict(distance):
+    df = pd.read_csv("dataset.csv")
+    X = df[['distance']]
+    y = df[['angle', 'pwm']]
+    regr = linear_model.LinearRegression()
+    regr.fit(X,y)
+    predictedVal = regr.predict([[distance]])
+    return predictedVal.item(0,0), predictedVal.item(0,1)
 
 
 def setAngle(angle):
@@ -96,7 +98,7 @@ def steerAngle():
 def writeHeaderCsv():
     with open('dataset.csv', 'w', encoding='UTF8') as csv_file:
             csv_writer = csv.writer(csv_file)
-            header = ['Lidar', 'Stearing Angle', 'Motor dutycycle']
+            header = ['distance', 'angle', 'pwm']
             csv_writer.writerow(header)
 
 
@@ -125,10 +127,16 @@ clockwise()
 
 try:
     while True:
-        motorSpeed()
-        steerAngle()
+        st = time.time()
+        #motorSpeed()
+        #steerAngle()
         distance = tof.get_distance()
-        writeCsv(distance, st, rc)
+        prediction = predict(distance)
+        servoAngle = prediction[0]
+        motorPwm = prediction[1]
+        pwm.ChangeDutyCycle(motorPwm)
+        setAngle(servoAngle)
+        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %d" % ((distance, prediction[0], prediction[1], time.time()-st)))
 except KeyboardInterrupt:
         pwm.stop()
         servo.stop()
