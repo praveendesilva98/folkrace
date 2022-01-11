@@ -123,6 +123,7 @@ def writeCsv(lidar, servoAngle, motorDC):
 
 
 clockwise()
+setAngle(90)
 
 
 try:
@@ -136,7 +137,7 @@ try:
         motorPwm = prediction[1]
         pwm.ChangeDutyCycle(motorPwm)
         setAngle(servoAngle)
-        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %d" % ((distance, prediction[0], prediction[1], time.time()-st)))
+        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, prediction[0], prediction[1], time.time()-st)))
 except KeyboardInterrupt:
         pwm.stop()
         servo.stop()
