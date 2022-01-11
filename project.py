@@ -1,8 +1,13 @@
  
 import RPi.GPIO as GPIO
 from VL53L0X_rasp_python.python.VL53L0X import *
+import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
-from sklearn import linear_model
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split 
+import time
 
 
 GPIO.setwarnings(False)
@@ -34,14 +39,28 @@ servo = GPIO.PWM(pinServo, 50)
 servo.start(0)
 
 
-def predict(distance):
-    df = pd.read_csv("dataset.csv")
-    X = df[['distance']]
-    y = df[['angle', 'pwm']]
-    regr = linear_model.LinearRegression()
-    regr.fit(X,y)
-    predictedVal = regr.predict([[distance]])
-    return predictedVal.item(0,0), predictedVal.item(0,1)
+def predictAngle(distance):
+    dataset = pd.read_csv('dataset.csv')
+    X = dataset.iloc[:, 0].values
+    y = dataset.iloc[:, 1].values
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+    poly_reg = PolynomialFeatures(degree=4)
+    X_poly = poly_reg.fit_transform(X.reshape(-1, 1))
+    pol_reg = LinearRegression()
+    pol_reg.fit(X_poly, y)
+    return pol_reg.predict(poly_reg.fit_transform([[distance]]))
+
+
+def predictPwm(distance):
+    dataset = pd.read_csv('dataset.csv')
+    X = dataset.iloc[:, 0].values
+    y = dataset.iloc[:, 2].values
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+    poly_reg = PolynomialFeatures(degree=4)
+    X_poly = poly_reg.fit_transform(X.reshape(-1, 1))
+    pol_reg = LinearRegression()
+    pol_reg.fit(X_poly, y)
+    return pol_reg.predict(poly_reg.fit_transform([[distance]]))
 
 
 def setAngle(angle):
@@ -62,65 +81,7 @@ def antiClockwise():
     GPIO.output(pinIna, GPIO.HIGH)
     GPIO.output(pinInb, GPIO.LOW)
 
-
-def motorSpeed():
-    if keyboard.read_key() == "u":
-        global rc
-        rc += 5
-    elif keyboard.read_key() == "b":
-        rc += -5
     
-    if rc>100:
-        rc=100
-    elif rc<0:
-        rc=0
-    pwm.ChangeDutyCycle(rc)
-    return rc
-
-
-def steerAngle():
-    if keyboard.read_key() == "k":
-        global st
-        st += 10
-    elif keyboard.read_key() == "h":
-        st += -10
-    else:
-        st = 90
-    
-    if st>130:
-        st=130
-    elif st<50:
-        st=50
-    setAngle(st)
-    return st
-
-
-def writeHeaderCsv():
-    with open('dataset.csv', 'w', encoding='UTF8') as csv_file:
-            csv_writer = csv.writer(csv_file)
-            header = ['distance', 'angle', 'pwm']
-            csv_writer.writerow(header)
-
-
-def readCsv():
-    try:
-        csv_file = open('dataset.csv')
-        csv_reader = csv.reader(csv_file)
-        count = len(list(csv_reader))
-        return count
-    except IOError:
-        print("File doen't exist!")
-        writeHeaderCsv()
-
-
-def writeCsv(lidar, servoAngle, motorDC):
-    count = readCsv()
-    data = [lidar, servoAngle, motorDC]
-    with open('dataset.csv', 'a', encoding='UTF8') as csv_file:
-        csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(data)
-    csv_file.close()
-
 
 clockwise()
 setAngle(90)
@@ -129,16 +90,12 @@ setAngle(90)
 try:
     while True:
         st = time.time()
-        gain = 1.2
-        #motorSpeed()
-        #steerAngle()
         distance = tof.get_distance()
-        prediction = predict(distance)
-        servoAngle = prediction[0]
-        motorPwm = prediction[1]
-        pwm.ChangeDutyCycle(gain*motorPwm)
+        servoAngle = predictAngle(distance)
+        motorPwm = predictPwm(distance)
+        pwm.ChangeDutyCycle(motorPwm)
         setAngle(servoAngle)
-        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, prediction[0], prediction[1], time.time()-st)))
+        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, servoAngle, motorPwm, time.time()-st)))
 except KeyboardInterrupt:
         pwm.stop()
         servo.stop()
