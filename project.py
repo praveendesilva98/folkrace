@@ -1,8 +1,8 @@
  
+ 
 import RPi.GPIO as GPIO
 from VL53L0X_rasp_python.python.VL53L0X import *
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
@@ -39,28 +39,20 @@ servo = GPIO.PWM(pinServo, 50)
 servo.start(0)
 
 
-def predictAngle(distance):
+def predict(distance):
     dataset = pd.read_csv('dataset.csv')
     X = dataset.iloc[:, 0].values
     y = dataset.iloc[:, 1].values
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+    z = dataset.iloc[:, 2].values
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=0)
+    X_train, X_test, z_train, z_test = train_test_split(X, z, test_size=0.4, random_state=0)
     poly_reg = PolynomialFeatures(degree=4)
     X_poly = poly_reg.fit_transform(X.reshape(-1, 1))
-    pol_reg = LinearRegression()
-    pol_reg.fit(X_poly, y)
-    return pol_reg.predict(poly_reg.fit_transform([[distance]]))
-
-
-def predictPwm(distance):
-    dataset = pd.read_csv('dataset.csv')
-    X = dataset.iloc[:, 0].values
-    y = dataset.iloc[:, 2].values
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-    poly_reg = PolynomialFeatures(degree=4)
-    X_poly = poly_reg.fit_transform(X.reshape(-1, 1))
-    pol_reg = LinearRegression()
-    pol_reg.fit(X_poly, y)
-    return pol_reg.predict(poly_reg.fit_transform([[distance]]))
+    pol_reg_angle = LinearRegression()
+    pol_reg_angle.fit(X_poly, y)
+    pol_reg_pwm = LinearRegression()
+    pol_reg_pwm.fit(X_poly, z)
+    return pol_reg_angle.predict(poly_reg.fit_transform([[distance]])), pol_reg_pwm.predict(poly_reg.fit_transform([[distance]]))
 
 
 def setAngle(angle):
@@ -91,8 +83,9 @@ try:
     while True:
         st = time.time()
         distance = tof.get_distance()
-        servoAngle = predictAngle(distance)
-        motorPwm = predictPwm(distance)
+        prediction = predict(distance)
+        servoAngle = prediction[0]
+        motorPwm = prediction[1]
         pwm.ChangeDutyCycle(motorPwm)
         setAngle(servoAngle)
         print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, servoAngle, motorPwm, time.time()-st)))
@@ -101,4 +94,5 @@ except KeyboardInterrupt:
         servo.stop()
         GPIO.cleanup()
         tof.stop_ranging()
+
 
