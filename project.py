@@ -82,13 +82,14 @@ setAngle(90)
 try:
     while True:
         st = time.time()
+        gain = 1
         distance = tof.get_distance()
         prediction = predict(distance)
         servoAngle = prediction[0]
         motorPwm = prediction[1]
-        pwm.ChangeDutyCycle(motorPwm)
+        pwm.ChangeDutyCycle(gain*motorPwm)
         setAngle(servoAngle)
-        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, servoAngle, motorPwm, time.time()-st)))
+        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, servoAngle, gain*motorPwm, time.time()-st)))
 except KeyboardInterrupt:
         pwm.stop()
         servo.stop()
