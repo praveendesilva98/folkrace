@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 import time
-import tensorflow as tf
+#import tensorflow as tf
 
 
 GPIO.setwarnings(False)
@@ -37,7 +37,7 @@ pwm.start(0)
 servo = GPIO.PWM(pinServo, 50)
 servo.start(0)
 
-
+""" 
 def predict(distance):
     dataset = pd.read_csv('dataset.csv')
     X = dataset.iloc[:, 0].values
@@ -57,6 +57,22 @@ def loadNN(distance, motorPwm):
     predicted_target=new_model.predict(test_data)
     label=np.argmax(predicted_target)
     return label
+ """
+
+def predict(distance):
+    dataset = pd.read_csv('dataset1.csv')
+    X = dataset.iloc[:, 0].values
+    y = dataset.iloc[:, 1].values
+    z = dataset.iloc[:, 2].values
+    poly_reg = PolynomialFeatures(degree=4)
+    X_poly = poly_reg.fit_transform(X.reshape(-1, 1))
+    pol_reg_angle = LinearRegression()
+    pol_reg_angle.fit(X_poly, y)
+    pol_reg_pwm = LinearRegression()
+    pol_reg_pwm.fit(X_poly, z)
+    servoAngle = pol_reg_angle.predict(poly_reg.fit_transform([[distance]]))
+    motorPwm = pol_reg_pwm.predict(poly_reg.fit_transform([[distance]]))
+    return servoAngle, motorPwm
 
 
 def setAngle(angle):
@@ -85,15 +101,21 @@ setAngle(90)
 try:
     while True:
         st = time.time()
+        gain = 1
         distance = tof.get_distance()
-        motorPwm = predict(distance)
-        servoAngle = loadNN(distance, motorPwm)
-        pwm.ChangeDutyCycle(motorPwm)
+        prediction = predict(distance)
+        servoAngle = prediction[0]
+        motorPwm = prediction[1]
+        #motorPwm = predict(distance)
+        #servoAngle = loadNN(distance, motorPwm)
+        pwm.ChangeDutyCycle(gain*motorPwm)
         setAngle(servoAngle)
-        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, servoAngle, motorPwm, time.time()-st)))
+        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, servoAngle, gain*motorPwm, time.time()-st)))
 except KeyboardInterrupt:
         pwm.stop()
         servo.stop()
         GPIO.cleanup()
         tof.stop_ranging()
+
+
 
