@@ -1,13 +1,12 @@
  
- 
 import RPi.GPIO as GPIO
 from VL53L0X_rasp_python.python.VL53L0X import *
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split 
 import time
+import tensorflow as tf
 
 
 GPIO.setwarnings(False)
@@ -42,17 +41,22 @@ servo.start(0)
 def predict(distance):
     dataset = pd.read_csv('dataset.csv')
     X = dataset.iloc[:, 0].values
-    y = dataset.iloc[:, 1].values
-    z = dataset.iloc[:, 2].values
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=0)
-    X_train, X_test, z_train, z_test = train_test_split(X, z, test_size=0.4, random_state=0)
+    y = dataset.iloc[:, 2].values
     poly_reg = PolynomialFeatures(degree=4)
     X_poly = poly_reg.fit_transform(X.reshape(-1, 1))
-    pol_reg_angle = LinearRegression()
-    pol_reg_angle.fit(X_poly, y)
     pol_reg_pwm = LinearRegression()
-    pol_reg_pwm.fit(X_poly, z)
-    return pol_reg_angle.predict(poly_reg.fit_transform([[distance]])), pol_reg_pwm.predict(poly_reg.fit_transform([[distance]]))
+    pol_reg_pwm.fit(X_poly, y)
+    motorPwm = pol_reg_pwm.predict(poly_reg.fit_transform([[distance]]))
+    return motorPwm
+
+
+def loadNN(distance, motorPwm):
+    new_model = tf.keras.models.load_model('model.h5')
+    test_data_1=np.array([distance,motorPwm]).reshape(1,-1)
+    test_data = tf.convert_to_tensor(test_data_1, dtype=tf.int64) 
+    predicted_target=new_model.predict(test_data)
+    label=np.argmax(predicted_target)
+    return label
 
 
 def setAngle(angle):
@@ -73,7 +77,6 @@ def antiClockwise():
     GPIO.output(pinIna, GPIO.HIGH)
     GPIO.output(pinInb, GPIO.LOW)
 
-    
 
 clockwise()
 setAngle(90)
@@ -82,18 +85,15 @@ setAngle(90)
 try:
     while True:
         st = time.time()
-        gain = 1
         distance = tof.get_distance()
-        prediction = predict(distance)
-        servoAngle = prediction[0]
-        motorPwm = prediction[1]
-        pwm.ChangeDutyCycle(gain*motorPwm)
+        motorPwm = predict(distance)
+        servoAngle = loadNN(distance, motorPwm)
+        pwm.ChangeDutyCycle(motorPwm)
         setAngle(servoAngle)
-        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, servoAngle, gain*motorPwm, time.time()-st)))
+        print("Distance: %d mm | Angle: %d° | PWM: %d | Exec time: %f" % ((distance, servoAngle, motorPwm, time.time()-st)))
 except KeyboardInterrupt:
         pwm.stop()
         servo.stop()
         GPIO.cleanup()
         tof.stop_ranging()
-
 
